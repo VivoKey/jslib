@@ -41,9 +41,9 @@ export class SearchService implements SearchServiceAbstraction {
         this.index = null;
         const builder = new lunr.Builder();
         builder.ref('id');
-        (builder as any).field('shortid', { boost: 100, extractor: (c: CipherView) => c.id.substr(0, 8) });
-        (builder as any).field('name', { boost: 10 });
-        (builder as any).field('subtitle', {
+        builder.field('shortid', { boost: 100, extractor: (c: CipherView) => c.id.substr(0, 8) });
+        builder.field('name', { boost: 10 });
+        builder.field('subtitle', {
             boost: 5,
             extractor: (c: CipherView) => {
                 if (c.subTitle != null && c.type === CipherType.Card) {
@@ -53,16 +53,16 @@ export class SearchService implements SearchServiceAbstraction {
             },
         });
         builder.field('notes');
-        (builder as any).field('login.username', {
+        builder.field('login.username', {
             extractor: (c: CipherView) => c.type === CipherType.Login && c.login != null ? c.login.username : null,
         });
-        (builder as any).field('login.uris', { boost: 2, extractor: (c: CipherView) => this.uriExtractor(c) });
-        (builder as any).field('fields', { extractor: (c: CipherView) => this.fieldExtractor(c, false) });
-        (builder as any).field('fields_joined', { extractor: (c: CipherView) => this.fieldExtractor(c, true) });
-        (builder as any).field('attachments', { extractor: (c: CipherView) => this.attachmentExtractor(c, false) });
-        (builder as any).field('attachments_joined',
+        builder.field('login.uris', { boost: 2, extractor: (c: CipherView) => this.uriExtractor(c) });
+        builder.field('fields', { extractor: (c: CipherView) => this.fieldExtractor(c, false) });
+        builder.field('fields_joined', { extractor: (c: CipherView) => this.fieldExtractor(c, true) });
+        builder.field('attachments', { extractor: (c: CipherView) => this.attachmentExtractor(c, false) });
+        builder.field('attachments_joined',
             { extractor: (c: CipherView) => this.attachmentExtractor(c, true) });
-        (builder as any).field('organizationid', { extractor: (c: CipherView) => c.organizationId });
+        builder.field('organizationid', { extractor: (c: CipherView) => c.organizationId });
         const ciphers = await this.cipherService.getAllDecrypted();
         ciphers.forEach((c) => builder.add(c));
         this.index = builder.build();
@@ -71,7 +71,9 @@ export class SearchService implements SearchServiceAbstraction {
         console.timeEnd('search indexing');
     }
 
-    async searchCiphers(query: string, filter: (cipher: CipherView) => boolean = null, ciphers: CipherView[] = null):
+    async searchCiphers(query: string,
+        filter: (((cipher: CipherView) => boolean) | (Array<(cipher: CipherView) => boolean>)) = null,
+        ciphers: CipherView[] = null):
         Promise<CipherView[]> {
         const results: CipherView[] = [];
         if (query != null) {
@@ -84,8 +86,11 @@ export class SearchService implements SearchServiceAbstraction {
         if (ciphers == null) {
             ciphers = await this.cipherService.getAllDecrypted();
         }
-        if (filter != null) {
-            ciphers = ciphers.filter(filter);
+
+        if (filter != null && Array.isArray(filter) && filter.length > 0) {
+            ciphers = ciphers.filter((c) => filter.every((f) => f == null || f(c)));
+        } else if (filter != null) {
+            ciphers = ciphers.filter(filter as (cipher: CipherView) => boolean);
         }
 
         if (!this.isSearchable(query)) {
@@ -138,9 +143,12 @@ export class SearchService implements SearchServiceAbstraction {
         return results;
     }
 
-    searchCiphersBasic(ciphers: CipherView[], query: string) {
+    searchCiphersBasic(ciphers: CipherView[], query: string, deleted: boolean = false) {
         query = query.trim().toLowerCase();
         return ciphers.filter((c) => {
+            if (deleted !== c.isDeleted) {
+                return false;
+            }
             if (c.name != null && c.name.toLowerCase().indexOf(query) > -1) {
                 return true;
             }

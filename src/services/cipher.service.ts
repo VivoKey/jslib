@@ -19,6 +19,7 @@ import { SymmetricCryptoKey } from '../models/domain/symmetricCryptoKey';
 
 import { CipherBulkDeleteRequest } from '../models/request/cipherBulkDeleteRequest';
 import { CipherBulkMoveRequest } from '../models/request/cipherBulkMoveRequest';
+import { CipherBulkRestoreRequest } from '../models/request/cipherBulkRestoreRequest';
 import { CipherBulkShareRequest } from '../models/request/cipherBulkShareRequest';
 import { CipherCollectionsRequest } from '../models/request/cipherCollectionsRequest';
 import { CipherCreateRequest } from '../models/request/cipherCreateRequest';
@@ -309,6 +310,9 @@ export class CipherService implements CipherServiceAbstraction {
         const ciphers = await this.getAllDecrypted();
 
         return ciphers.filter((cipher) => {
+            if (cipher.isDeleted) {
+                return false;
+            }
             if (folder && cipher.folderId === groupingId) {
                 return true;
             } else if (!folder && cipher.collectionIds != null && cipher.collectionIds.indexOf(groupingId) > -1) {
@@ -351,6 +355,9 @@ export class CipherService implements CipherServiceAbstraction {
         }
 
         return ciphers.filter((cipher) => {
+            if (cipher.deletedDate != null) {
+                return false;
+            }
             if (includeOtherTypes != null && includeOtherTypes.indexOf(cipher.type) > -1) {
                 return true;
             }
@@ -790,12 +797,82 @@ export class CipherService implements CipherServiceAbstraction {
         };
     }
 
+    async softDelete(id: string | string[]): Promise<any> {
+        const userId = await this.userService.getUserId();
+        const ciphers = await this.storageService.get<{ [id: string]: CipherData; }>(
+            Keys.ciphersPrefix + userId);
+        if (ciphers == null) {
+            return;
+        }
+
+        const setDeletedDate = (cipherId: string) => {
+            if (ciphers[cipherId] == null) {
+                return;
+            }
+            ciphers[cipherId].deletedDate = new Date().toISOString();
+        };
+
+        if (typeof id === 'string') {
+            setDeletedDate(id);
+        } else {
+            (id as string[]).forEach(setDeletedDate);
+        }
+
+        await this.storageService.save(Keys.ciphersPrefix + userId, ciphers);
+        this.decryptedCipherCache = null;
+    }
+
+    async softDeleteWithServer(id: string): Promise<any> {
+        await this.apiService.putDeleteCipher(id);
+        await this.softDelete(id);
+    }
+
+    async softDeleteManyWithServer(ids: string[]): Promise<any> {
+        await this.apiService.putDeleteManyCiphers(new CipherBulkDeleteRequest(ids));
+        await this.softDelete(ids);
+    }
+
+    async restore(id: string | string[]): Promise<any> {
+        const userId = await this.userService.getUserId();
+        const ciphers = await this.storageService.get<{ [id: string]: CipherData; }>(
+            Keys.ciphersPrefix + userId);
+        if (ciphers == null) {
+            return;
+        }
+
+        const clearDeletedDate = (cipherId: string) => {
+            if (ciphers[cipherId] == null) {
+                return;
+            }
+            ciphers[cipherId].deletedDate = null;
+        };
+
+        if (typeof id === 'string') {
+            clearDeletedDate(id);
+        } else {
+            (id as string[]).forEach(clearDeletedDate);
+        }
+
+        await this.storageService.save(Keys.ciphersPrefix + userId, ciphers);
+        this.decryptedCipherCache = null;
+    }
+
+    async restoreWithServer(id: string): Promise<any> {
+        await this.apiService.putRestoreCipher(id);
+        await this.restore(id);
+    }
+
+    async restoreManyWithServer(ids: string[]): Promise<any> {
+        await this.apiService.putRestoreManyCiphers(new CipherBulkRestoreRequest(ids));
+        await this.restore(ids);
+    }
+
     // Helpers
 
     private async shareAttachmentWithServer(attachmentView: AttachmentView, cipherId: string,
         organizationId: string): Promise<any> {
         const attachmentResponse = await this.apiService.nativeFetch(
-            new Request(attachmentView.url, { cache: 'no-cache' }));
+            new Request(attachmentView.url, { cache: 'no-store' }));
         if (attachmentResponse.status !== 200) {
             throw Error('Failed to download attachment: ' + attachmentResponse.status.toString());
         }
