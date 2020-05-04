@@ -32,7 +32,6 @@ export class CodebookCsvImporter extends BaseImporter implements Importer {
             this.processKvp(cipher, 'Account', value.Account);
             this.processKvp(cipher, 'Date', value.Date);
 
-            this.convertToNoteIfNeeded(cipher);
             this.cleanupCipher(cipher);
             result.ciphers.push(cipher);
         });
