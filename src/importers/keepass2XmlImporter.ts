@@ -74,8 +74,8 @@ export class KeePass2XmlImporter extends BaseImporter implements Importer {
                     cipher.notes += (value + '\n');
                 } else {
                     let type = FieldType.Text;
-                    if (valueEl.attributes.length > 0 && valueEl.attributes['ProtectInMemory'] != null &&
-                        valueEl.attributes['ProtectInMemory'].value === 'True') {
+                    if (valueEl.attributes.length > 0 && (valueEl.attributes as any)['ProtectInMemory'] != null &&
+                        (valueEl.attributes as any)['ProtectInMemory'].value === 'True') {
                         type = FieldType.Hidden;
                     }
                     this.processKvp(cipher, key, value, type);
