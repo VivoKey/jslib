@@ -61,7 +61,7 @@ export class RegisterComponent {
                 return this.masterPasswordScore != null ? this.i18nService.t('weak') : null;
         }
     }
-    oidcfill() {
+    async oidcfill() {
         window.open("https://api.vivokey.com/openid/authorize?response_type=code&scope=openid&client_id=58180502394&state=register&redirect_uri=https://bitwarden.vivokey.com/oidc");
     }
     async submit() {
